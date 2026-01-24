@@ -30,6 +30,9 @@ FINGER_TOUCH_THRESHOLD = 0.05  # Distance threshold for finger touching detectio
 THUMB_EXTENSION_THRESHOLD = (
     0.6  # Minimum thumb length ratio for extension (reduced to allow natural gestures)
 )
+THUMBS_VERTICAL_SEPARATION_THRESHOLD = (
+    0.03  # Y-coordinate separation threshold for thumbs up/down direction detection
+)
 
 # Gesture Confidence Thresholds (minimum confidence to report gesture)
 MIN_CONFIDENCE_PALM = 0.7

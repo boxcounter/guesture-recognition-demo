@@ -193,12 +193,12 @@ class GestureDetector:
 
         # If thumb tip is significantly above thumb IP, it's pointing up
         # If thumb tip is significantly below thumb IP, it's pointing down
-        if thumb_vertical_separation > 0.03:  # Tip is above IP by threshold
+        if thumb_vertical_separation > settings.THUMBS_VERTICAL_SEPARATION_THRESHOLD:
             return GestureResult(
                 gesture=GestureType.THUMBS_UP,
                 confidence=settings.MIN_CONFIDENCE_THUMBS,
             )
-        if thumb_vertical_separation < -0.03:  # Tip is below IP by threshold
+        if thumb_vertical_separation < -settings.THUMBS_VERTICAL_SEPARATION_THRESHOLD:
             return GestureResult(
                 gesture=GestureType.THUMBS_DOWN,
                 confidence=settings.MIN_CONFIDENCE_THUMBS,
@@ -328,11 +328,13 @@ class GestureDetector:
         dist_mcp = self._distance_2d(wrist, thumb_mcp)
         dist_tip = self._distance_2d(wrist, thumb_tip)
 
-        # Thumb is extended if tip is farther than MCP
-        ratio = dist_tip / dist_mcp if dist_mcp > 0 else 0
+        # Thumb is extended if tip is farther than MCP by threshold percentage
         is_extended = dist_tip > dist_mcp * (1 + settings.THUMB_EXTENSION_THRESHOLD)
 
-        logger.info(f"Thumb: dist_mcp={dist_mcp:.3f}, dist_tip={dist_tip:.3f}, ratio={ratio:.3f}, extended={is_extended}")
+        logger.info(
+            f"Thumb: dist_mcp={dist_mcp:.3f}, dist_tip={dist_tip:.3f}, "
+            f"threshold={settings.THUMB_EXTENSION_THRESHOLD}, extended={is_extended}"
+        )
 
         return is_extended
 
