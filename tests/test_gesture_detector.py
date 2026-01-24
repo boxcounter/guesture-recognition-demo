@@ -28,52 +28,52 @@ class TestGestureDetector:
     def test_fist_detection(self, detector):
         """Test that a fist gesture is detected correctly."""
         # Create landmarks for a fist (all fingers curled, thumb not extended)
-        # Wrist at origin
+        # For a fist, fingertips should curl back toward palm, at similar distance to wrist as MCPs
         landmarks = [create_landmark(0.5, 0.5, 0.0)]  # Wrist
-        
-        # Thumb (not extended - close to wrist)
+
+        # Thumb (not extended - curled into palm)
         landmarks.extend([
-            create_landmark(0.52, 0.48, 0.0),  # Thumb CMC
-            create_landmark(0.53, 0.47, 0.0),  # Thumb MCP
-            create_landmark(0.54, 0.46, 0.0),  # Thumb IP
-            create_landmark(0.55, 0.45, 0.0),  # Thumb TIP
+            create_landmark(0.48, 0.48, 0.0),  # Thumb CMC
+            create_landmark(0.46, 0.47, 0.0),  # Thumb MCP (distance ~0.057 from wrist)
+            create_landmark(0.45, 0.46, 0.0),  # Thumb IP
+            create_landmark(0.44, 0.46, 0.0),  # Thumb TIP (distance ~0.063, only 10% more than MCP)
         ])
-        
-        # Index finger (curled)
+
+        # Index finger (curled - tip curls back toward palm)
         landmarks.extend([
-            create_landmark(0.55, 0.5, 0.0),   # Index MCP
-            create_landmark(0.56, 0.49, 0.0),  # Index PIP
-            create_landmark(0.57, 0.48, 0.0),  # Index DIP
-            create_landmark(0.58, 0.47, 0.0),  # Index TIP
+            create_landmark(0.55, 0.48, 0.0),  # Index MCP (distance ~0.054 from wrist)
+            create_landmark(0.57, 0.47, 0.0),  # Index PIP
+            create_landmark(0.58, 0.48, 0.0),  # Index DIP
+            create_landmark(0.56, 0.49, 0.0),  # Index TIP (distance ~0.061, only 13% more)
         ])
-        
+
         # Middle finger (curled)
         landmarks.extend([
-            create_landmark(0.6, 0.5, 0.0),    # Middle MCP
-            create_landmark(0.61, 0.49, 0.0),  # Middle PIP
-            create_landmark(0.62, 0.48, 0.0),  # Middle DIP
-            create_landmark(0.63, 0.47, 0.0),  # Middle TIP
+            create_landmark(0.56, 0.45, 0.0),  # Middle MCP (distance ~0.078 from wrist)
+            create_landmark(0.58, 0.43, 0.0),  # Middle PIP
+            create_landmark(0.59, 0.44, 0.0),  # Middle DIP
+            create_landmark(0.58, 0.45, 0.0),  # Middle TIP (distance ~0.094, only 20% more)
         ])
-        
+
         # Ring finger (curled)
         landmarks.extend([
-            create_landmark(0.65, 0.5, 0.0),   # Ring MCP
-            create_landmark(0.66, 0.49, 0.0),  # Ring PIP
-            create_landmark(0.67, 0.48, 0.0),  # Ring DIP
-            create_landmark(0.68, 0.47, 0.0),  # Ring TIP
+            create_landmark(0.54, 0.43, 0.0),  # Ring MCP (distance ~0.081 from wrist)
+            create_landmark(0.55, 0.41, 0.0),  # Ring PIP
+            create_landmark(0.56, 0.42, 0.0),  # Ring DIP
+            create_landmark(0.55, 0.43, 0.0),  # Ring TIP (distance ~0.094, only 16% more)
         ])
-        
+
         # Pinky finger (curled)
         landmarks.extend([
-            create_landmark(0.7, 0.5, 0.0),    # Pinky MCP
-            create_landmark(0.71, 0.49, 0.0),  # Pinky PIP
-            create_landmark(0.72, 0.48, 0.0),  # Pinky DIP
-            create_landmark(0.73, 0.47, 0.0),  # Pinky TIP
+            create_landmark(0.51, 0.42, 0.0),  # Pinky MCP (distance ~0.080 from wrist)
+            create_landmark(0.52, 0.40, 0.0),  # Pinky PIP
+            create_landmark(0.52, 0.41, 0.0),  # Pinky DIP
+            create_landmark(0.51, 0.42, 0.0),  # Pinky TIP (distance ~0.080, same as MCP)
         ])
-        
+
         hand_data = create_test_hand_data(landmarks)
         result = detector.detect(hand_data)
-        
+
         assert result.gesture == GestureType.FIST
         assert result.confidence >= settings.MIN_CONFIDENCE_FIST
 
@@ -130,81 +130,105 @@ class TestGestureDetector:
 
     def test_pointing_up_detection(self, detector):
         """Test that pointing up gesture is detected correctly."""
-        # Create landmarks for pointing up (index extended, others curled)
+        # Create landmarks for pointing up (index extended upward, others curled)
         landmarks = [create_landmark(0.5, 0.5, 0.0)]  # Wrist
-        
-        # Thumb (curled)
+
+        # Thumb (can be in any position for pointing)
         landmarks.extend([
-            create_landmark(0.52, 0.48, 0.0),
-            create_landmark(0.53, 0.47, 0.0),
-            create_landmark(0.54, 0.46, 0.0),
-            create_landmark(0.55, 0.45, 0.0),
+            create_landmark(0.48, 0.48, 0.0),
+            create_landmark(0.46, 0.47, 0.0),
+            create_landmark(0.45, 0.46, 0.0),
+            create_landmark(0.44, 0.46, 0.0),
         ])
-        
-        # Index finger (extended upward)
+
+        # Index finger (extended upward - tip much farther from wrist than MCP)
         landmarks.extend([
-            create_landmark(0.52, 0.45, 0.0),
-            create_landmark(0.52, 0.4, 0.0),
-            create_landmark(0.52, 0.35, 0.0),
-            create_landmark(0.52, 0.25, 0.0),  # Extended far up
+            create_landmark(0.52, 0.45, 0.0),  # Index MCP (distance ~0.055 from wrist)
+            create_landmark(0.52, 0.38, 0.0),  # Index PIP
+            create_landmark(0.52, 0.31, 0.0),  # Index DIP
+            create_landmark(0.52, 0.22, 0.0),  # Index TIP (distance ~0.28, 5x MCP distance)
         ])
-        
-        # Middle finger (curled)
+
+        # Middle finger (curled - tip close to MCP distance)
         landmarks.extend([
-            create_landmark(0.5, 0.45, 0.0),
-            create_landmark(0.5, 0.44, 0.0),
-            create_landmark(0.5, 0.43, 0.0),
-            create_landmark(0.5, 0.42, 0.0),
+            create_landmark(0.5, 0.44, 0.0),   # Middle MCP (distance ~0.061 from wrist)
+            create_landmark(0.49, 0.43, 0.0),  # Middle PIP
+            create_landmark(0.49, 0.44, 0.0),  # Middle DIP
+            create_landmark(0.49, 0.45, 0.0),  # Middle TIP (distance ~0.051, closer than MCP)
         ])
-        
+
         # Ring finger (curled)
         landmarks.extend([
-            create_landmark(0.48, 0.45, 0.0),
-            create_landmark(0.48, 0.44, 0.0),
-            create_landmark(0.48, 0.43, 0.0),
-            create_landmark(0.48, 0.42, 0.0),
+            create_landmark(0.48, 0.44, 0.0),  # Ring MCP (distance ~0.061 from wrist)
+            create_landmark(0.47, 0.44, 0.0),  # Ring PIP
+            create_landmark(0.47, 0.45, 0.0),  # Ring DIP
+            create_landmark(0.47, 0.46, 0.0),  # Ring TIP (distance ~0.051, closer than MCP)
         ])
-        
+
         # Pinky finger (curled)
         landmarks.extend([
-            create_landmark(0.46, 0.45, 0.0),
-            create_landmark(0.46, 0.44, 0.0),
-            create_landmark(0.46, 0.43, 0.0),
-            create_landmark(0.46, 0.42, 0.0),
+            create_landmark(0.46, 0.45, 0.0),  # Pinky MCP (distance ~0.057 from wrist)
+            create_landmark(0.45, 0.46, 0.0),  # Pinky PIP
+            create_landmark(0.45, 0.47, 0.0),  # Pinky DIP
+            create_landmark(0.45, 0.48, 0.0),  # Pinky TIP (distance ~0.057, same as MCP)
         ])
-        
+
         hand_data = create_test_hand_data(landmarks)
         result = detector.detect(hand_data)
-        
+
         assert result.gesture == GestureType.POINTING_UP
         assert result.confidence >= settings.MIN_CONFIDENCE_POINTING
 
     def test_thumbs_up_detection(self, detector):
         """Test that thumbs up gesture is detected correctly."""
-        # Create landmarks for thumbs up (thumb extended up, others curled)
+        # Create landmarks for thumbs up (thumb extended upward, others curled)
         landmarks = [create_landmark(0.5, 0.5, 0.0)]  # Wrist
-        
-        # Thumb (extended upward)
+
+        # Thumb (extended upward - tip significantly farther from wrist than MCP)
         landmarks.extend([
-            create_landmark(0.48, 0.48, 0.0),
-            create_landmark(0.46, 0.45, 0.0),
-            create_landmark(0.44, 0.4, 0.0),   # Thumb IP
-            create_landmark(0.42, 0.35, 0.0),  # Thumb TIP (above IP)
+            create_landmark(0.48, 0.48, 0.0),  # Thumb CMC
+            create_landmark(0.46, 0.45, 0.0),  # Thumb MCP (distance ~0.064 from wrist)
+            create_landmark(0.44, 0.40, 0.0),  # Thumb IP (y=0.40)
+            create_landmark(0.42, 0.35, 0.0),  # Thumb TIP (y=0.35, distance ~0.17, 2.6x MCP)
         ])
-        
-        # Index through pinky (all curled)
-        for i in range(4):
-            base_x = 0.52 + i * 0.02
-            landmarks.extend([
-                create_landmark(base_x, 0.45, 0.0),
-                create_landmark(base_x, 0.44, 0.0),
-                create_landmark(base_x, 0.43, 0.0),
-                create_landmark(base_x, 0.42, 0.0),
-            ])
-        
+        # Vertical separation: IP.y - TIP.y = 0.40 - 0.35 = 0.05 > 0.03 threshold ✓
+
+        # Index through pinky (all curled - tips curl back toward palm)
+        # Index finger
+        landmarks.extend([
+            create_landmark(0.55, 0.45, 0.0),  # Index MCP (distance ~0.071 from wrist)
+            create_landmark(0.56, 0.44, 0.0),  # Index PIP
+            create_landmark(0.56, 0.45, 0.0),  # Index DIP
+            create_landmark(0.55, 0.46, 0.0),  # Index TIP (distance ~0.066, less than MCP)
+        ])
+
+        # Middle finger
+        landmarks.extend([
+            create_landmark(0.57, 0.44, 0.0),  # Middle MCP (distance ~0.083 from wrist)
+            create_landmark(0.58, 0.43, 0.0),  # Middle PIP
+            create_landmark(0.58, 0.44, 0.0),  # Middle DIP
+            create_landmark(0.57, 0.45, 0.0),  # Middle TIP (distance ~0.078, less than MCP)
+        ])
+
+        # Ring finger
+        landmarks.extend([
+            create_landmark(0.56, 0.42, 0.0),  # Ring MCP (distance ~0.089 from wrist)
+            create_landmark(0.57, 0.41, 0.0),  # Ring PIP
+            create_landmark(0.57, 0.42, 0.0),  # Ring DIP
+            create_landmark(0.56, 0.43, 0.0),  # Ring TIP (distance ~0.081, less than MCP)
+        ])
+
+        # Pinky finger
+        landmarks.extend([
+            create_landmark(0.53, 0.41, 0.0),  # Pinky MCP (distance ~0.092 from wrist)
+            create_landmark(0.54, 0.40, 0.0),  # Pinky PIP
+            create_landmark(0.54, 0.41, 0.0),  # Pinky DIP
+            create_landmark(0.53, 0.42, 0.0),  # Pinky TIP (distance ~0.084, less than MCP)
+        ])
+
         hand_data = create_test_hand_data(landmarks)
         result = detector.detect(hand_data)
-        
+
         assert result.gesture == GestureType.THUMBS_UP
         assert result.confidence >= settings.MIN_CONFIDENCE_THUMBS
 
