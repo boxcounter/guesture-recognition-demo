@@ -7,13 +7,12 @@ smoothing and confidence aggregation on top of the raw gesture detection algorit
 import logging
 from collections import deque
 from dataclasses import dataclass
-from typing import Optional
 
 import numpy as np
 
 from config import settings
 from src.gesture_detector import GestureDetector, GestureResult, GestureType
-from src.hand_tracker import HandData, HandTracker
+from src.hand_tracker import HandData, HandTracker, Landmark
 from src.visualizer import Visualizer
 
 logger = logging.getLogger(__name__)
@@ -29,7 +28,7 @@ class Gesture:
     name: str  # Gesture name (e.g., "FIST", "PALM_FORWARD")
     gesture_type: GestureType  # Enum value
     confidence: float  # Average confidence over consistent frames (0-1)
-    direction: Optional[str] = None  # For pointing gestures: "up", "down", "left", "right"
+    direction: str | None = None  # For pointing gestures: "up", "down", "left", "right"
 
 
 @dataclass
@@ -39,9 +38,9 @@ class RecognitionResult:
     This is the main output data structure for the API.
     """
 
-    gesture: Optional[Gesture]  # Detected gesture (None if no stable gesture)
+    gesture: Gesture | None  # Detected gesture (None if no stable gesture)
     hand_detected: bool  # Whether a hand is visible
-    hand_landmarks: Optional[list]  # Raw landmark data (21 points)
+    hand_landmarks: list[Landmark] | None  # Raw landmark data (21 points)
     frame_with_annotations: np.ndarray  # Annotated video frame
     raw_confidence: float  # Raw confidence from current frame (0-1)
     is_stable: bool  # Whether gesture has been stable for MIN_CONSISTENT_FRAMES
@@ -69,9 +68,11 @@ class GestureSmoother:
         self.min_consistent_frames = min_consistent_frames
         self.gesture_history: deque[GestureType] = deque(maxlen=history_size)
         self.confidence_history: deque[float] = deque(maxlen=history_size)
-        self.current_stable_gesture: Optional[GestureType] = None
+        self.current_stable_gesture: GestureType | None = None
 
-    def update(self, gesture: GestureType, confidence: float) -> tuple[GestureType, float, bool]:
+    def update(
+        self, gesture: GestureType, confidence: float
+    ) -> tuple[GestureType, float, bool]:
         """Update history and get smoothed gesture.
 
         Args:
@@ -124,7 +125,9 @@ class GestureSmoother:
         """
         relevant_confidences = [
             conf
-            for g, conf in zip(self.gesture_history, self.confidence_history)
+            for g, conf in zip(
+                self.gesture_history, self.confidence_history, strict=False
+            )
             if g == gesture
         ]
         if not relevant_confidences:
@@ -220,7 +223,7 @@ class GestureRecognizer:
             gesture = self._create_gesture_object(smoothed_gesture, avg_confidence)
 
         # Visualize
-        self.visualizer.draw_landmarks(annotated_frame, hand_data.landmarks)
+        self.visualizer.draw_landmarks(annotated_frame, hand_data)
         if gesture:
             self.visualizer.draw_gesture_label(
                 annotated_frame, gesture.name, gesture.confidence
@@ -288,7 +291,7 @@ class GestureRecognizer:
             direction=direction,
         )
 
-    def get_current_gesture(self) -> Optional[Gesture]:
+    def get_current_gesture(self) -> Gesture | None:
         """Get the current stable gesture without processing a new frame.
 
         Returns:
