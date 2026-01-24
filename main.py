@@ -2,16 +2,16 @@
 
 This is the main entry point for running gesture recognition with live video feed.
 Press 'q' to quit.
+
+Phase 3: Now uses GestureRecognizer with temporal smoothing for stable detection.
 """
 
 import logging
 
 import cv2
 
-from src.gesture_detector import GestureDetector
-from src.hand_tracker import HandTracker
+from src.gesture_recognizer import GestureRecognizer
 from src.video_processor import VideoProcessor
-from src.visualizer import Visualizer
 
 # Configure logging
 logging.basicConfig(
@@ -23,13 +23,11 @@ logger = logging.getLogger(__name__)
 
 def main() -> None:
     """Run the gesture recognition demo."""
-    logger.info("Starting gesture recognition demo...")
+    logger.info("Starting gesture recognition demo (Phase 3 - Temporal Smoothing)...")
     logger.info("Press 'q' to quit")
 
-    # Initialize components
-    tracker = HandTracker()
-    detector = GestureDetector()
-    visualizer = Visualizer()
+    # Initialize recognizer (handles tracking, detection, smoothing, visualization)
+    recognizer = GestureRecognizer()
 
     try:
         with VideoProcessor() as video:
@@ -42,28 +40,20 @@ def main() -> None:
                     logger.warning("Failed to capture frame")
                     break
 
-                # Detect hands
-                hands = tracker.process_frame(frame)
+                # Process frame (all-in-one API call)
+                result = recognizer.process_frame(frame)
 
-                # Process each detected hand
-                for hand_data in hands:
-                    # Detect gesture
-                    gesture_result = detector.detect(hand_data)
-
-                    # Draw landmarks and gesture
-                    visualizer.draw_landmarks(frame, hand_data)
-                    visualizer.draw_gesture_label(
-                        frame,
-                        gesture_result.gesture.value,
-                        gesture_result.confidence,
+                # Log gesture changes
+                if result.gesture:
+                    logger.info(
+                        f"Gesture: {result.gesture.name} "
+                        f"(confidence: {result.gesture.confidence:.2f}, "
+                        f"stable: {result.is_stable})"
                     )
 
-                # Draw status and FPS
-                visualizer.draw_hand_status(frame, hand_detected=len(hands) > 0)
-                visualizer.draw_fps(frame, video.get_fps())
-
-                # Display frame
-                cv2.imshow("Gesture Recognition - Phase 2", frame)
+                # Display annotated frame
+                cv2.imshow("Gesture Recognition - Phase 3 (Temporal Smoothing)",
+                          result.frame_with_annotations)
 
                 # Check for quit key
                 if cv2.waitKey(1) & 0xFF == ord("q"):
@@ -76,7 +66,7 @@ def main() -> None:
         logger.error(f"Error during execution: {e}", exc_info=True)
     finally:
         # Cleanup
-        tracker.close()
+        recognizer.close()
         cv2.destroyAllWindows()
         logger.info("Demo ended")
 
