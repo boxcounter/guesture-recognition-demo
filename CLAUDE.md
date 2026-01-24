@@ -18,6 +18,79 @@ python main.py
 python3 main.py
 ```
 
+## Code Quality Requirements
+
+**IMPORTANT: This project uses the `pre-commit` framework to enforce code quality automatically.**
+
+### Pre-Commit Hook Setup
+
+The project uses the [pre-commit](https://pre-commit.com) framework to run automated checks before every commit.
+
+**One-time setup**:
+```bash
+make pre-commit
+# Or directly: pre-commit install
+```
+
+**What the hooks check**:
+1. **Ruff linter**: Checks code style and auto-fixes issues (with `--unsafe-fixes`)
+2. **Ruff formatter**: Ensures consistent code formatting
+3. **Pyright**: Type checking in strict mode
+4. **Pytest**: Runs all tests
+5. **File checks**: Trailing whitespace, YAML/JSON/TOML validation, merge conflicts, etc.
+
+**Hook behavior**:
+- ✅ If all checks pass: commit proceeds
+- 🔧 If auto-fixable issues found: applies fixes automatically, re-stage and commit again
+- ❌ If issues need manual fix: blocks commit with error messages
+- 💡 To bypass (not recommended): `git commit --no-verify`
+- 🔄 To update hooks: `pre-commit autoupdate`
+
+**Run hooks manually** (without committing):
+```bash
+pre-commit run --all-files        # Run all hooks on all files
+pre-commit run ruff                # Run specific hook
+pre-commit run --files src/foo.py  # Run on specific files
+```
+
+### Manual Code Quality Checks
+
+Quick commands available via Makefile:
+
+```bash
+make lint           # Ruff linter
+make format         # Format code with black, isort, and ruff
+make type-check     # Pyright type checker
+make test           # Pytest
+```
+
+Or run tools directly:
+```bash
+uv run ruff check --fix --unsafe-fixes src/
+uv run ruff format src/
+uv run pyright src/
+uv run pytest tests/ -v
+```
+
+### Type Hint Requirements
+
+This project uses strict type checking (Python 3.10+ syntax):
+- Use `X | None` instead of `Optional[X]`
+- Always specify generic type parameters: `list[Landmark]` not `list`
+- Add explicit `strict=` parameter to `zip()` calls
+- All functions must have type hints for parameters and return values
+
+### Code Review for AI Assistants
+
+When AI assistants make code changes, they should perform a comprehensive review before committing:
+
+1. **CLAUDE.md Compliance**: Check changes comply with all guidance
+2. **Bug Detection**: Scan for type mismatches, logic errors, API misuse
+3. **Git History Context**: Ensure changes align with historical patterns
+4. **Code Comment Compliance**: Verify changes comply with docstrings
+
+The pre-commit hooks will catch most style/type issues automatically, but AI should still review for logical correctness and architectural alignment.
+
 ## Architecture
 
 ### Core Modules
