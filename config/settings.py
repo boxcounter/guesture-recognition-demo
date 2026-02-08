@@ -6,43 +6,43 @@ Modify these values to tune the system behavior.
 
 # Camera Settings
 CAMERA_INDEX = 0
-CAMERA_WIDTH = 1280
-CAMERA_HEIGHT = 720
+CAMERA_WIDTH = 1920  # Full HD for better long-distance detection (increased from 1280)
+CAMERA_HEIGHT = 1080  # Full HD for better long-distance detection (increased from 720)
 CAMERA_FPS = 30
 MIRROR_CAMERA = True  # Flip horizontally for user-facing cameras
 
 # MediaPipe Hand Tracking Settings
 MODEL_PATH = "models/hand_landmarker.task"  # Path to MediaPipe hand landmarker model
-MIN_DETECTION_CONFIDENCE = 0.7  # Confidence threshold for initial hand detection
-MIN_TRACKING_CONFIDENCE = 0.5  # Confidence threshold for hand tracking between frames
+MIN_DETECTION_CONFIDENCE = 0.5  # Confidence threshold for initial hand detection (lowered for better long-distance detection)
+MIN_TRACKING_CONFIDENCE = (
+    0.4  # Confidence threshold for hand tracking between frames (lowered for stability)
+)
 MAX_NUM_HANDS = 1  # Maximum number of hands to detect (1 for simplicity)
 
 # Gesture Detection Thresholds
-FINGER_EXTENSION_THRESHOLD = (
-    0.3  # Ratio for determining if finger is extended (reduced from 0.6)
-)
+FINGER_EXTENSION_THRESHOLD = 0.2  # Ratio for determining if finger is extended (lowered for long-distance stability)
 FINGER_CURL_THRESHOLD = 0.4  # Ratio for determining if finger is curled
-POINTING_ANGLE_TOLERANCE = 22.5  # Degrees tolerance for pointing direction
+POINTING_ANGLE_TOLERANCE = (
+    30.0  # Degrees tolerance for pointing direction (increased for stability)
+)
 PALM_FORWARD_NORMAL_THRESHOLD = (
     0.01  # Z-coordinate threshold for palm orientation (reduced from 0.05)
 )
 FINGER_TOUCH_THRESHOLD = 0.05  # Distance threshold for finger touching detection
-THUMB_EXTENSION_THRESHOLD = (
-    0.6  # Minimum thumb length ratio for extension (reduced to allow natural gestures)
-)
-THUMBS_VERTICAL_SEPARATION_THRESHOLD = (
-    0.03  # Y-coordinate separation threshold for thumbs up/down direction detection
-)
+THUMB_EXTENSION_THRESHOLD = 0.7  # Minimum thumb length ratio for extension
 
 # Gesture Confidence Thresholds (minimum confidence to report gesture)
-MIN_CONFIDENCE_PALM = 0.7
-MIN_CONFIDENCE_POINTING = 0.75
-MIN_CONFIDENCE_FIST = 0.7
-MIN_CONFIDENCE_THUMBS = 0.75
+MIN_CONFIDENCE_PALM = 0.6  # Lowered for long-distance detection
+MIN_CONFIDENCE_POINTING = 0.6  # Lowered for long-distance detection
+MIN_CONFIDENCE_FIST = 0.6  # Lowered for long-distance detection
 
 # Temporal Smoothing Settings
-GESTURE_HISTORY_SIZE = 5  # Number of frames to keep in history
-MIN_CONSISTENT_FRAMES = 3  # Minimum consecutive frames to confirm gesture change
+GESTURE_HISTORY_SIZE = (
+    10  # Number of frames to keep in history (increased for stability at distance)
+)
+MIN_CONSISTENT_FRAMES = (
+    5  # Minimum consecutive frames to confirm gesture change (increased for stability)
+)
 CONFIDENCE_SMOOTHING_ALPHA = 0.3  # EMA smoothing factor (0-1, lower = smoother)
 
 # Visualization Settings

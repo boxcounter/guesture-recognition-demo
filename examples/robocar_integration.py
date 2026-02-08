@@ -8,12 +8,15 @@ Usage:
 """
 
 import logging
-import time
+from typing import TYPE_CHECKING, Any
 
 import cv2
 
 from src.gesture_recognizer import GestureRecognizer
 from src.video_processor import VideoProcessor
+
+if TYPE_CHECKING:
+    from src.gesture_recognizer import RecognitionResult
 
 logging.basicConfig(
     level=logging.INFO,
@@ -74,8 +77,6 @@ def main():
     logger.info("  🖐️  Palm Forward → STOP")
     logger.info("  ✊ Fist → GO")
     logger.info("  ☝️  Pointing → TURN")
-    logger.info("  👍 Thumbs Up → SPEED UP")
-    logger.info("  👎 Thumbs Down → SLOW DOWN")
     logger.info("Press 'q' to quit\n")
 
     # Initialize robot and recognizer
@@ -111,13 +112,8 @@ def main():
 
                         elif gesture_name.startswith("POINTING_"):
                             direction = result.gesture.direction
-                            robot.turn(direction)
-
-                        elif gesture_name == "THUMBS_UP":
-                            robot.increase_speed()
-
-                        elif gesture_name == "THUMBS_DOWN":
-                            robot.decrease_speed()
+                            if direction:
+                                robot.turn(direction)
 
                         last_gesture = gesture_name
 
@@ -163,7 +159,7 @@ class GestureRobotController:
     from robot control logic.
     """
 
-    def __init__(self, robot, recognizer):
+    def __init__(self, robot: MockRobot, recognizer: GestureRecognizer) -> None:
         self.robot = robot
         self.recognizer = recognizer
         self.last_gesture = None
@@ -182,8 +178,6 @@ class GestureRobotController:
         gesture_actions = {
             "PALM_FORWARD": self.robot.stop,
             "FIST": self.robot.go,
-            "THUMBS_UP": self.robot.increase_speed,
-            "THUMBS_DOWN": self.robot.decrease_speed,
         }
 
         # Handle pointing gestures
@@ -193,7 +187,7 @@ class GestureRobotController:
         elif gesture_name in gesture_actions:
             gesture_actions[gesture_name]()
 
-    def process_frame(self, frame):
+    def process_frame(self, frame: Any) -> "RecognitionResult":
         """Process frame and trigger callbacks.
 
         Args:
@@ -207,9 +201,7 @@ class GestureRobotController:
         # Trigger callback on gesture change
         if result.gesture:
             if result.gesture.name != self.last_gesture:
-                self.on_gesture_detected(
-                    result.gesture.name, result.gesture.confidence
-                )
+                self.on_gesture_detected(result.gesture.name, result.gesture.confidence)
                 self.last_gesture = result.gesture.name
         else:
             self.last_gesture = None

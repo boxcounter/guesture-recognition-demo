@@ -1,7 +1,7 @@
 """Gesture detection algorithms.
 
 Detects specific hand gestures from landmark data using geometric analysis.
-Supported gestures: Palm forward (stop), Pointing directions, Fist (go), Thumbs up/down.
+Supported gestures: Palm forward (stop), Pointing directions, Fist (go).
 """
 
 import logging
@@ -25,8 +25,6 @@ class GestureType(Enum):
     POINTING_LEFT = "pointing_left"
     POINTING_RIGHT = "pointing_right"
     FIST = "fist"  # Go gesture
-    THUMBS_UP = "thumbs_up"
-    THUMBS_DOWN = "thumbs_down"
 
 
 @dataclass(slots=True, frozen=True)
@@ -60,13 +58,7 @@ class GestureDetector:
                 confidence=settings.MIN_CONFIDENCE_PALM,
             )
 
-        # Check for thumbs up/down BEFORE fist (both have curled fingers)
-        thumbs_result = self._check_thumbs(landmarks)
-        if thumbs_result.gesture != GestureType.UNKNOWN:
-            logger.info(f"Detected: {thumbs_result.gesture.value.upper()}")
-            return thumbs_result
-
-        # Check for fist (all fingers curled, thumb not pointing up/down)
+        # Check for fist (all fingers curled)
         if self._is_fist(landmarks):
             logger.info("Detected: FIST")
             return GestureResult(
@@ -139,73 +131,16 @@ class GestureDetector:
         Returns:
             True if hand is in fist position.
         """
-        # All fingers must be curled (including thumb to distinguish from thumbs up)
-        return (
-            not self._is_thumb_extended(landmarks)  # Thumb must be curled
+        # Check all fingers are curled
+        fingers_curled = (
+            not self._is_thumb_extended(landmarks)  # Thumb curled
             and not self._is_finger_extended(landmarks, finger_idx=1)  # Index
             and not self._is_finger_extended(landmarks, finger_idx=2)  # Middle
             and not self._is_finger_extended(landmarks, finger_idx=3)  # Ring
             and not self._is_finger_extended(landmarks, finger_idx=4)  # Pinky
         )
 
-    def _check_thumbs(self, landmarks: list[Landmark]) -> GestureResult:
-        """Check for thumbs up or thumbs down gesture.
-
-        Thumbs gesture is detected when:
-        - Other four fingers are curled
-        - Thumb is extended (to distinguish from fist)
-        - Thumb is pointing up or down (based on Y position, not distance)
-
-        Args:
-            landmarks: List of 21 hand landmarks.
-
-        Returns:
-            GestureResult with thumbs up/down or UNKNOWN.
-        """
-        # Check if other fingers are curled (not thumb)
-        other_fingers_curled = (
-            not self._is_finger_extended(landmarks, finger_idx=1)  # Index
-            and not self._is_finger_extended(landmarks, finger_idx=2)  # Middle
-            and not self._is_finger_extended(landmarks, finger_idx=3)  # Ring
-            and not self._is_finger_extended(landmarks, finger_idx=4)  # Pinky
-        )
-
-        if not other_fingers_curled:
-            return GestureResult(gesture=GestureType.UNKNOWN, confidence=0.0)
-
-        # Check if thumb is extended (to distinguish from fist)
-        if not self._is_thumb_extended(landmarks):
-            return GestureResult(gesture=GestureType.UNKNOWN, confidence=0.0)
-
-        # Check thumb direction based on Y coordinate (not distance)
-        # In image coordinates, Y=0 is top, Y increases downward
-        thumb_tip = landmarks[4]
-        thumb_ip = landmarks[3]  # Use IP instead of MCP for better direction detection
-        wrist = landmarks[0]
-
-        # Calculate vertical separation
-        thumb_vertical_separation = thumb_ip.y - thumb_tip.y
-
-        logger.info(
-            f"Thumbs check - tip.y={thumb_tip.y:.3f}, ip.y={thumb_ip.y:.3f}, "
-            f"sep={thumb_vertical_separation:.3f}"
-        )
-
-        # If thumb tip is significantly above thumb IP, it's pointing up
-        # If thumb tip is significantly below thumb IP, it's pointing down
-        if thumb_vertical_separation > settings.THUMBS_VERTICAL_SEPARATION_THRESHOLD:
-            return GestureResult(
-                gesture=GestureType.THUMBS_UP,
-                confidence=settings.MIN_CONFIDENCE_THUMBS,
-            )
-        if thumb_vertical_separation < -settings.THUMBS_VERTICAL_SEPARATION_THRESHOLD:
-            return GestureResult(
-                gesture=GestureType.THUMBS_DOWN,
-                confidence=settings.MIN_CONFIDENCE_THUMBS,
-            )
-
-        # Thumb not pointing clearly up or down
-        return GestureResult(gesture=GestureType.UNKNOWN, confidence=0.0)
+        return fingers_curled
 
     def _check_pointing(self, landmarks: list[Landmark]) -> GestureResult:
         """Check for pointing gesture in any direction.
