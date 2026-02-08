@@ -101,24 +101,50 @@ The pre-commit hooks will catch most style/type issues automatically, but AI sho
 - `src/visualizer.py` - Visualization utilities for drawing landmarks, connections, and gesture labels
 
 **Hand Tracking and Gesture Detection:**
-- `src/hand_tracker.py` - MediaPipe HandLandmarker wrapper for 21-point hand tracking
+- `src/hand_tracker.py` - MediaPipe HandLandmarker wrapper for 21-point hand tracking with landmark smoothing
 - `src/gesture_detector.py` - Gesture detection algorithms using geometric analysis of hand landmarks
+- `src/gesture_recognizer.py` - High-level gesture recognition with temporal smoothing for stability
 - `config/settings.py` - Centralized configuration for all thresholds and parameters
 
 ### Data Flow
 
 1. **Capture**: `VideoProcessor` captures frames from camera at 30 FPS
 2. **Track**: `HandTracker` processes frames with MediaPipe to extract 21 hand landmarks
-3. **Detect**: `GestureDetector` analyzes landmarks to identify gestures (palm, fist, pointing, thumbs)
-4. **Visualize**: `Visualizer` draws landmarks and gesture labels on frames
-5. **Display**: OpenCV shows annotated frames in real-time window
+3. **Smooth Landmarks**: `HandTracker` applies exponential moving average to reduce landmark jitter
+4. **Detect**: `GestureDetector` analyzes landmarks to identify gestures (palm, fist, pointing)
+5. **Smooth Gestures**: `GestureSmoother` applies temporal smoothing using majority voting for stability
+6. **Visualize**: `Visualizer` draws landmarks and gesture labels on frames
+7. **Display**: OpenCV shows annotated frames in real-time window
 
 ### Key Architectural Decisions
 
 - **Geometric Analysis**: Uses landmark positions and distances rather than ML models for gesture detection
 - **Configurable Thresholds**: All detection parameters centralized in `config/settings.py` for easy tuning
 - **Modular Design**: Separation of concerns (capture, tracking, detection, visualization) for maintainability
-- **Real-time Processing**: Optimized for 30 FPS performance without temporal smoothing (planned for Phase 3)
+- **Real-time Processing**: Optimized for 30 FPS performance with temporal smoothing (Phase 3 complete)
+- **Dual Smoothing**: Landmark smoothing reduces jitter, temporal smoothing prevents false detections
+
+### Temporal Smoothing
+
+The system uses a two-layer smoothing approach to ensure stable, reliable gesture detection:
+
+**Landmark Smoothing** (`HandTracker`):
+- Applies exponential moving average (EMA) to hand landmarks frame-by-frame
+- Reduces tracking jitter, especially important for long-distance detection
+- Configurable smoothing factor (default: 0.5) balances responsiveness and stability
+- Optional feature that can be enabled/disabled via constructor parameter
+
+**Gesture Smoothing** (`GestureSmoother`):
+- Maintains sliding window of recent gestures (GESTURE_HISTORY_SIZE frames)
+- Requires MIN_CONSISTENT_FRAMES consecutive frames to confirm gesture change
+- Prevents false detections from brief, unstable hand positions
+- Averages confidence scores for smoother transitions
+- All parameters tunable in `config/settings.py`
+
+**Recommended Settings:**
+- `GESTURE_HISTORY_SIZE = 10` - Track last 10 frames (~0.33 seconds at 30 FPS)
+- `MIN_CONSISTENT_FRAMES = 5` - Require 5 consistent frames (~0.17 seconds)
+- Adjust higher for more stability, lower for faster response
 
 ### Integration Points
 
