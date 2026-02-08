@@ -52,8 +52,10 @@ def main() -> None:
                     )
 
                 # Display annotated frame
-                cv2.imshow("Gesture Recognition - Phase 3 (Temporal Smoothing)",
-                          result.frame_with_annotations)
+                cv2.imshow(
+                    "Gesture Recognition - Phase 3 (Temporal Smoothing)",
+                    result.frame_with_annotations,
+                )
 
                 # Check for quit key
                 if cv2.waitKey(1) & 0xFF == ord("q"):
