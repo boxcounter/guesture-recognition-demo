@@ -49,33 +49,38 @@ class GestureDetector:
         """
         landmarks = hand_data.landmarks
 
+        # Validate landmark count
+        if len(landmarks) != 21:
+            logger.error(f"Invalid landmark count: {len(landmarks)}, expected 21")
+            return GestureResult(gesture=GestureType.UNKNOWN, confidence=0.0)
+
         # Check gestures in order of distinctiveness
         # Start with palm forward (most distinct)
-        if self._is_palm_forward(landmarks):
-            logger.info("Detected: PALM_FORWARD")
-            return GestureResult(
-                gesture=GestureType.PALM_FORWARD,
-                confidence=settings.MIN_CONFIDENCE_PALM,
+        palm_result = self._check_palm_forward(landmarks)
+        if palm_result.gesture != GestureType.UNKNOWN:
+            logger.info(
+                f"Detected: PALM_FORWARD (confidence: {palm_result.confidence:.2f})"
             )
+            return palm_result
 
         # Check for fist (all fingers curled)
-        if self._is_fist(landmarks):
-            logger.info("Detected: FIST")
-            return GestureResult(
-                gesture=GestureType.FIST,
-                confidence=settings.MIN_CONFIDENCE_FIST,
-            )
+        fist_result = self._check_fist(landmarks)
+        if fist_result.gesture != GestureType.UNKNOWN:
+            logger.info(f"Detected: FIST (confidence: {fist_result.confidence:.2f})")
+            return fist_result
 
         # Check for pointing gestures
         pointing_result = self._check_pointing(landmarks)
         if pointing_result.gesture != GestureType.UNKNOWN:
-            logger.info(f"Detected: {pointing_result.gesture.value.upper()}")
+            logger.info(
+                f"Detected: {pointing_result.gesture.value.upper()} (confidence: {pointing_result.confidence:.2f})"
+            )
             return pointing_result
 
         # No gesture detected
         return GestureResult(gesture=GestureType.UNKNOWN, confidence=0.0)
 
-    def _is_palm_forward(self, landmarks: list[Landmark]) -> bool:
+    def _check_palm_forward(self, landmarks: list[Landmark]) -> GestureResult:
         """Check if palm is facing forward (toward camera).
 
         Palm forward is detected when:
@@ -86,7 +91,7 @@ class GestureDetector:
             landmarks: List of 21 hand landmarks.
 
         Returns:
-            True if palm is facing forward.
+            GestureResult with PALM_FORWARD or UNKNOWN and calculated confidence.
         """
         # Check if fingers are extended (excluding thumb)
         index_extended = self._is_finger_extended(landmarks, finger_idx=1)
@@ -98,13 +103,13 @@ class GestureDetector:
             index_extended and middle_extended and ring_extended and pinky_extended
         )
 
-        logger.info(
+        logger.debug(
             f"Palm check - Index:{index_extended} Middle:{middle_extended} "
             f"Ring:{ring_extended} Pinky:{pinky_extended}"
         )
 
         if not fingers_extended:
-            return False
+            return GestureResult(gesture=GestureType.UNKNOWN, confidence=0.0)
 
         # Check palm orientation using wrist (0) and middle MCP (9)
         wrist = landmarks[0]
@@ -114,13 +119,22 @@ class GestureDetector:
         # If Z component is negative, palm is facing camera
         palm_z = middle_mcp.z - wrist.z
 
-        logger.info(
+        logger.debug(
             f"Palm Z-axis: {palm_z:.3f} (threshold: {-settings.PALM_FORWARD_NORMAL_THRESHOLD})"
         )
 
-        return palm_z < -settings.PALM_FORWARD_NORMAL_THRESHOLD
+        if palm_z >= -settings.PALM_FORWARD_NORMAL_THRESHOLD:
+            return GestureResult(gesture=GestureType.UNKNOWN, confidence=0.0)
 
-    def _is_fist(self, landmarks: list[Landmark]) -> bool:
+        # Calculate confidence based on how strongly the palm faces forward
+        # More negative palm_z = more confident
+        # Normalize by threshold and scale up to get meaningful range
+        confidence_raw = abs(palm_z) / (settings.PALM_FORWARD_NORMAL_THRESHOLD * 10)
+        confidence = max(settings.MIN_CONFIDENCE_PALM, min(1.0, confidence_raw))
+
+        return GestureResult(gesture=GestureType.PALM_FORWARD, confidence=confidence)
+
+    def _check_fist(self, landmarks: list[Landmark]) -> GestureResult:
         """Check if hand is making a fist.
 
         Fist is detected when all fingers including thumb are curled.
@@ -129,18 +143,65 @@ class GestureDetector:
             landmarks: List of 21 hand landmarks.
 
         Returns:
-            True if hand is in fist position.
+            GestureResult with FIST or UNKNOWN and calculated confidence.
         """
         # Check all fingers are curled
-        fingers_curled = (
-            not self._is_thumb_extended(landmarks)  # Thumb curled
-            and not self._is_finger_extended(landmarks, finger_idx=1)  # Index
-            and not self._is_finger_extended(landmarks, finger_idx=2)  # Middle
-            and not self._is_finger_extended(landmarks, finger_idx=3)  # Ring
-            and not self._is_finger_extended(landmarks, finger_idx=4)  # Pinky
+        thumb_curled = not self._is_thumb_extended(landmarks)
+        index_curled = not self._is_finger_extended(landmarks, finger_idx=1)
+        middle_curled = not self._is_finger_extended(landmarks, finger_idx=2)
+        ring_curled = not self._is_finger_extended(landmarks, finger_idx=3)
+        pinky_curled = not self._is_finger_extended(landmarks, finger_idx=4)
+
+        all_curled = (
+            thumb_curled
+            and index_curled
+            and middle_curled
+            and ring_curled
+            and pinky_curled
         )
 
-        return fingers_curled
+        if not all_curled:
+            return GestureResult(gesture=GestureType.UNKNOWN, confidence=0.0)
+
+        # Calculate confidence based on curl strength of each finger
+        # For simplicity, calculate how much closer tips are to wrist compared to MCPs
+        wrist = landmarks[0]
+
+        curl_confidences = []
+
+        # Check each finger (1-4, not thumb which behaves differently)
+        for finger_idx in range(1, 5):
+            mcp_idx = 5 + (finger_idx - 1) * 4
+            tip_idx = mcp_idx + 3
+            mcp = landmarks[mcp_idx]
+            tip = landmarks[tip_idx]
+
+            dist_mcp = self._distance_2d(wrist, mcp)
+            dist_tip = self._distance_2d(wrist, tip)
+
+            # Curl confidence: tip should be closer to wrist than MCP
+            # Higher ratio = more curled = higher confidence
+            if dist_mcp > 0:
+                curl_ratio = 1.0 - (dist_tip / dist_mcp)
+                curl_confidences.append(max(0.0, min(1.0, curl_ratio * 2.0)))
+
+        # Check thumb separately
+        thumb_mcp = landmarks[2]
+        thumb_tip = landmarks[4]
+        dist_thumb_mcp = self._distance_2d(wrist, thumb_mcp)
+        dist_thumb_tip = self._distance_2d(wrist, thumb_tip)
+        if dist_thumb_mcp > 0:
+            thumb_curl_ratio = 1.0 - (dist_thumb_tip / dist_thumb_mcp)
+            curl_confidences.append(max(0.0, min(1.0, thumb_curl_ratio * 2.0)))
+
+        # Average confidence across all fingers
+        if curl_confidences:
+            confidence_raw = sum(curl_confidences) / len(curl_confidences)
+            confidence = max(settings.MIN_CONFIDENCE_FIST, min(1.0, confidence_raw))
+        else:
+            confidence = settings.MIN_CONFIDENCE_FIST
+
+        return GestureResult(gesture=GestureType.FIST, confidence=confidence)
 
     def _check_pointing(self, landmarks: list[Landmark]) -> GestureResult:
         """Check for pointing gesture in any direction.
@@ -154,7 +215,7 @@ class GestureDetector:
             landmarks: List of 21 hand landmarks.
 
         Returns:
-            GestureResult with pointing direction or UNKNOWN.
+            GestureResult with pointing direction or UNKNOWN with calculated confidence.
         """
         # Check if index is extended and others are curled
         index_extended = self._is_finger_extended(landmarks, finger_idx=1)
@@ -182,7 +243,7 @@ class GestureDetector:
         if angle < 0:
             angle += 360
 
-        logger.info(f"Pointing angle: {angle:.1f}° (dx={dx:.3f}, dy={dy:.3f})")
+        logger.debug(f"Pointing angle: {angle:.1f}° (dx={dx:.3f}, dy={dy:.3f})")
 
         tolerance = settings.POINTING_ANGLE_TOLERANCE
 
@@ -192,23 +253,32 @@ class GestureDetector:
         # Left: 180° (±tolerance)
         # Up: 270° (±tolerance)
 
+        gesture = GestureType.UNKNOWN
+        angle_diff = 0.0
+
         if angle >= 360 - tolerance or angle <= tolerance:  # Right: 337.5-22.5°
             gesture = GestureType.POINTING_RIGHT
+            angle_diff = min(angle, 360 - angle)  # Distance from 0°/360°
         elif 90 - tolerance <= angle <= 90 + tolerance:  # Down: 67.5-112.5°
             gesture = GestureType.POINTING_DOWN
+            angle_diff = abs(angle - 90)
         elif 180 - tolerance <= angle <= 180 + tolerance:  # Left: 157.5-202.5°
             gesture = GestureType.POINTING_LEFT
+            angle_diff = abs(angle - 180)
         elif 270 - tolerance <= angle <= 270 + tolerance:  # Up: 247.5-292.5°
             gesture = GestureType.POINTING_UP
+            angle_diff = abs(angle - 270)
         else:
             # In between directions, not confident enough
-            logger.info(f"Pointing angle {angle:.1f}° in between directions")
+            logger.debug(f"Pointing angle {angle:.1f}° in between directions")
             return GestureResult(gesture=GestureType.UNKNOWN, confidence=0.0)
 
-        return GestureResult(
-            gesture=gesture,
-            confidence=settings.MIN_CONFIDENCE_POINTING,
-        )
+        # Calculate confidence based on angle proximity to cardinal direction
+        # Closer to exact cardinal direction = higher confidence
+        confidence_raw = 1.0 - (angle_diff / tolerance)
+        confidence = max(settings.MIN_CONFIDENCE_POINTING, min(1.0, confidence_raw))
+
+        return GestureResult(gesture=gesture, confidence=confidence)
 
     def _is_finger_extended(self, landmarks: list[Landmark], finger_idx: int) -> bool:
         """Check if a finger is extended based on landmark positions.
@@ -266,7 +336,7 @@ class GestureDetector:
         # Thumb is extended if tip is farther than MCP by threshold percentage
         is_extended = dist_tip > dist_mcp * (1 + settings.THUMB_EXTENSION_THRESHOLD)
 
-        logger.info(
+        logger.debug(
             f"Thumb: dist_mcp={dist_mcp:.3f}, dist_tip={dist_tip:.3f}, "
             f"threshold={settings.THUMB_EXTENSION_THRESHOLD}, extended={is_extended}"
         )

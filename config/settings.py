@@ -28,13 +28,16 @@ POINTING_ANGLE_TOLERANCE = (
 PALM_FORWARD_NORMAL_THRESHOLD = (
     0.01  # Z-coordinate threshold for palm orientation (reduced from 0.05)
 )
-FINGER_TOUCH_THRESHOLD = 0.05  # Distance threshold for finger touching detection
+FINGER_TOUCH_THRESHOLD = 0.05  # Reserved for future: finger pinch detection
 THUMB_EXTENSION_THRESHOLD = 0.7  # Minimum thumb length ratio for extension
 
 # Gesture Confidence Thresholds (minimum confidence to report gesture)
 MIN_CONFIDENCE_PALM = 0.6  # Lowered for long-distance detection
 MIN_CONFIDENCE_POINTING = 0.6  # Lowered for long-distance detection
 MIN_CONFIDENCE_FIST = 0.6  # Lowered for long-distance detection
+MIN_CONFIDENCE_ROBOT_CONTROL = (
+    0.7  # Minimum confidence for robot control (higher = safer)
+)
 
 # Temporal Smoothing Settings
 GESTURE_HISTORY_SIZE = (
@@ -43,7 +46,9 @@ GESTURE_HISTORY_SIZE = (
 MIN_CONSISTENT_FRAMES = (
     5  # Minimum consecutive frames to confirm gesture change (increased for stability)
 )
-CONFIDENCE_SMOOTHING_ALPHA = 0.3  # EMA smoothing factor (0-1, lower = smoother)
+CONFIDENCE_SMOOTHING_ALPHA = (
+    0.3  # Reserved for future: alternative EMA smoothing algorithm
+)
 
 # Visualization Settings
 LANDMARK_COLOR = (0, 255, 0)  # Green for landmarks (BGR format)

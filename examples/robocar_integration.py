@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 import cv2
 
+from config import settings
 from src.gesture_recognizer import GestureRecognizer
 from src.video_processor import VideoProcessor
 
@@ -103,7 +104,7 @@ def main():
                     confidence = result.gesture.confidence
 
                     # Only act on high-confidence gestures
-                    if confidence >= 0.7:
+                    if confidence >= settings.MIN_CONFIDENCE_ROBOT_CONTROL:
                         if gesture_name == "PALM_FORWARD":
                             robot.stop()
 
@@ -157,6 +158,16 @@ class GestureRobotController:
 
     This pattern is useful when you want to decouple gesture recognition
     from robot control logic.
+
+    **When to use this pattern:**
+    - Complex robot control state machines
+    - Multiple gesture handlers with different priorities
+    - Need to log or record gesture events
+
+    **When to use imperative pattern (see main()):**
+    - Simple direct control
+    - Prototyping
+    - Single-threaded applications
     """
 
     def __init__(self, robot: MockRobot, recognizer: GestureRecognizer) -> None:
@@ -171,7 +182,7 @@ class GestureRobotController:
             gesture_name: Name of detected gesture.
             confidence: Confidence score (0-1).
         """
-        if confidence < 0.7:
+        if confidence < settings.MIN_CONFIDENCE_ROBOT_CONTROL:
             return
 
         # Map gestures to robot commands
