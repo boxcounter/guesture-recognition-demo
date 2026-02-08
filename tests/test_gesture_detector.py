@@ -1,31 +1,12 @@
 """Unit tests for gesture detection algorithms."""
 
-import pytest
-
 from config import settings
 from src.gesture_detector import GestureDetector, GestureType
-from src.hand_tracker import HandData, Landmark
-
-
-def create_landmark(x: float, y: float, z: float, visibility: float = 1.0) -> Landmark:
-    """Helper to create a landmark for testing."""
-    return Landmark(x=x, y=y, z=z, visibility=visibility)
-
-
-def create_test_hand_data(
-    landmarks: list[Landmark], confidence: float = 1.0
-) -> HandData:
-    """Helper to create HandData for testing."""
-    return HandData(landmarks=landmarks, handedness="Right", confidence=confidence)
+from tests.conftest import create_landmark, create_test_hand_data
 
 
 class TestGestureDetector:
     """Test suite for GestureDetector."""
-
-    @pytest.fixture
-    def detector(self):
-        """Create a GestureDetector instance for testing."""
-        return GestureDetector()
 
     def test_fist_detection(self, detector: GestureDetector) -> None:
         """Test that a fist gesture is detected correctly."""
@@ -261,3 +242,210 @@ class TestGestureDetector:
 
         assert result.gesture == GestureType.UNKNOWN
         assert result.confidence == 0.0
+
+    def test_pointing_left_detection(self, detector: GestureDetector) -> None:
+        """Test that pointing left gesture is detected correctly."""
+        # Create landmarks for pointing left (index extended to the left)
+        landmarks = [create_landmark(0.5, 0.5, 0.0)]  # Wrist
+
+        # Thumb (curled)
+        landmarks.extend(
+            [
+                create_landmark(0.48, 0.48, 0.0),
+                create_landmark(0.46, 0.47, 0.0),
+                create_landmark(0.45, 0.46, 0.0),
+                create_landmark(0.44, 0.46, 0.0),
+            ]
+        )
+
+        # Index finger (extended to the left)
+        landmarks.extend(
+            [
+                create_landmark(0.45, 0.52, 0.0),  # Index MCP
+                create_landmark(0.38, 0.52, 0.0),  # Index PIP
+                create_landmark(0.31, 0.52, 0.0),  # Index DIP
+                create_landmark(0.22, 0.52, 0.0),  # Index TIP (pointing left)
+            ]
+        )
+
+        # Middle, ring, pinky fingers (curled)
+        for finger_base_x in [0.44, 0.43, 0.42]:
+            landmarks.extend(
+                [
+                    create_landmark(finger_base_x, 0.50, 0.0),
+                    create_landmark(finger_base_x + 0.01, 0.49, 0.0),
+                    create_landmark(finger_base_x + 0.02, 0.49, 0.0),
+                    create_landmark(finger_base_x + 0.03, 0.49, 0.0),
+                ]
+            )
+
+        hand_data = create_test_hand_data(landmarks)
+        result = detector.detect(hand_data)
+
+        assert result.gesture == GestureType.POINTING_LEFT
+        assert result.confidence >= settings.MIN_CONFIDENCE_POINTING
+
+    def test_pointing_right_detection(self, detector: GestureDetector) -> None:
+        """Test that pointing right gesture is detected correctly."""
+        # Create landmarks for pointing right (index extended to the right)
+        landmarks = [create_landmark(0.5, 0.5, 0.0)]  # Wrist
+
+        # Thumb (curled)
+        landmarks.extend(
+            [
+                create_landmark(0.48, 0.48, 0.0),
+                create_landmark(0.46, 0.47, 0.0),
+                create_landmark(0.45, 0.46, 0.0),
+                create_landmark(0.44, 0.46, 0.0),
+            ]
+        )
+
+        # Index finger (extended to the right)
+        landmarks.extend(
+            [
+                create_landmark(0.55, 0.52, 0.0),  # Index MCP
+                create_landmark(0.62, 0.52, 0.0),  # Index PIP
+                create_landmark(0.69, 0.52, 0.0),  # Index DIP
+                create_landmark(0.78, 0.52, 0.0),  # Index TIP (pointing right)
+            ]
+        )
+
+        # Middle, ring, pinky fingers (curled)
+        for finger_base_x in [0.56, 0.57, 0.58]:
+            landmarks.extend(
+                [
+                    create_landmark(finger_base_x, 0.50, 0.0),
+                    create_landmark(finger_base_x - 0.01, 0.49, 0.0),
+                    create_landmark(finger_base_x - 0.02, 0.49, 0.0),
+                    create_landmark(finger_base_x - 0.03, 0.49, 0.0),
+                ]
+            )
+
+        hand_data = create_test_hand_data(landmarks)
+        result = detector.detect(hand_data)
+
+        assert result.gesture == GestureType.POINTING_RIGHT
+        assert result.confidence >= settings.MIN_CONFIDENCE_POINTING
+
+    def test_pointing_diagonal_returns_unknown(self, detector: GestureDetector) -> None:
+        """Test that pointing at a diagonal angle (not cardinal direction) returns UNKNOWN."""
+        # Create landmarks for pointing at 45 degrees (between up and right)
+        landmarks = [create_landmark(0.5, 0.5, 0.0)]  # Wrist
+
+        # Thumb (curled)
+        landmarks.extend(
+            [
+                create_landmark(0.48, 0.48, 0.0),
+                create_landmark(0.46, 0.47, 0.0),
+                create_landmark(0.45, 0.46, 0.0),
+                create_landmark(0.44, 0.46, 0.0),
+            ]
+        )
+
+        # Index finger (extended at 45 degrees - equal dx and dy)
+        landmarks.extend(
+            [
+                create_landmark(0.52, 0.45, 0.0),  # Index MCP
+                create_landmark(0.57, 0.40, 0.0),  # Index PIP
+                create_landmark(0.62, 0.35, 0.0),  # Index DIP
+                create_landmark(0.68, 0.29, 0.0),  # Index TIP (45 degree angle)
+            ]
+        )
+
+        # Middle, ring, pinky fingers (curled)
+        for finger_base_y in [0.44, 0.44, 0.45]:
+            landmarks.extend(
+                [
+                    create_landmark(0.5, finger_base_y, 0.0),
+                    create_landmark(0.49, finger_base_y + 0.01, 0.0),
+                    create_landmark(0.49, finger_base_y + 0.02, 0.0),
+                    create_landmark(0.49, finger_base_y + 0.03, 0.0),
+                ]
+            )
+
+        hand_data = create_test_hand_data(landmarks)
+        result = detector.detect(hand_data)
+
+        # Diagonal pointing should return UNKNOWN (outside tolerance)
+        assert result.gesture == GestureType.UNKNOWN
+        assert result.confidence == 0.0
+
+    def test_invalid_landmark_count(self, detector: GestureDetector) -> None:
+        """Test that invalid landmark counts are rejected."""
+        # Test with 20 landmarks (missing one)
+        landmarks = [create_landmark(0.5, 0.5, 0.0) for _ in range(20)]
+        hand_data = create_test_hand_data(landmarks)
+        result = detector.detect(hand_data)
+
+        assert result.gesture == GestureType.UNKNOWN
+        assert result.confidence == 0.0
+
+        # Test with 22 landmarks (one extra)
+        landmarks = [create_landmark(0.5, 0.5, 0.0) for _ in range(22)]
+        hand_data = create_test_hand_data(landmarks)
+        result = detector.detect(hand_data)
+
+        assert result.gesture == GestureType.UNKNOWN
+        assert result.confidence == 0.0
+
+    def test_confidence_values_are_calculated(self, detector: GestureDetector) -> None:
+        """Test that confidence values are actually calculated, not hardcoded."""
+        # Create two palm forward gestures with different strengths
+        # Strong palm forward (very negative Z)
+        landmarks_strong = [create_landmark(0.5, 0.5, 0.0)]  # Wrist
+        landmarks_strong.extend(
+            [
+                create_landmark(0.45, 0.48, 0.02),
+                create_landmark(0.42, 0.46, 0.03),
+                create_landmark(0.4, 0.44, 0.04),
+                create_landmark(0.38, 0.42, 0.05),
+            ]
+        )
+        # Index, middle, ring, pinky extended with strong negative Z
+        for x_pos in [0.52, 0.5, 0.48, 0.46]:
+            landmarks_strong.extend(
+                [
+                    create_landmark(x_pos, 0.45, -0.1),  # Strong negative Z
+                    create_landmark(x_pos, 0.4, -0.12),
+                    create_landmark(x_pos, 0.35, -0.14),
+                    create_landmark(x_pos, 0.3, -0.16),
+                ]
+            )
+
+        # Weak palm forward (barely negative Z)
+        landmarks_weak = [create_landmark(0.5, 0.5, 0.0)]  # Wrist
+        landmarks_weak.extend(
+            [
+                create_landmark(0.45, 0.48, 0.02),
+                create_landmark(0.42, 0.46, 0.03),
+                create_landmark(0.4, 0.44, 0.04),
+                create_landmark(0.38, 0.42, 0.05),
+            ]
+        )
+        # Index, middle, ring, pinky extended with weak negative Z
+        for x_pos in [0.52, 0.5, 0.48, 0.46]:
+            landmarks_weak.extend(
+                [
+                    create_landmark(
+                        x_pos, 0.45, -0.015
+                    ),  # Weak negative Z (barely over threshold)
+                    create_landmark(x_pos, 0.4, -0.02),
+                    create_landmark(x_pos, 0.35, -0.025),
+                    create_landmark(x_pos, 0.3, -0.03),
+                ]
+            )
+
+        hand_data_strong = create_test_hand_data(landmarks_strong)
+        hand_data_weak = create_test_hand_data(landmarks_weak)
+
+        result_strong = detector.detect(hand_data_strong)
+        result_weak = detector.detect(hand_data_weak)
+
+        # Both should be detected as PALM_FORWARD
+        assert result_strong.gesture == GestureType.PALM_FORWARD
+        assert result_weak.gesture == GestureType.PALM_FORWARD
+
+        # But strong should have higher confidence (verifying calculation, not hardcoded)
+        assert result_strong.confidence > result_weak.confidence
+        assert result_strong.confidence >= settings.MIN_CONFIDENCE_PALM
+        assert result_weak.confidence >= settings.MIN_CONFIDENCE_PALM
