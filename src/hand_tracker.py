@@ -61,6 +61,7 @@ class HandTracker:
         min_detection_confidence: float | None = None,
         min_tracking_confidence: float | None = None,
         max_num_hands: int | None = None,
+        landmark_smoothing: float = 0.5,  # EMA smoothing factor (0=no smoothing, 1=max smoothing)
     ) -> None:
         """Initialize hand tracker with MediaPipe HandLandmarker.
 
@@ -71,6 +72,8 @@ class HandTracker:
                 Defaults to settings.MIN_TRACKING_CONFIDENCE.
             max_num_hands: Maximum number of hands to detect.
                 Defaults to settings.MAX_NUM_HANDS.
+            landmark_smoothing: Smoothing factor for landmarks (0-1).
+                Higher values = more smoothing = less jitter but more lag.
         """
         self.min_detection_confidence = (
             min_detection_confidence or settings.MIN_DETECTION_CONFIDENCE
@@ -79,6 +82,12 @@ class HandTracker:
             min_tracking_confidence or settings.MIN_TRACKING_CONFIDENCE
         )
         self.max_num_hands = max_num_hands or settings.MAX_NUM_HANDS
+        self.landmark_smoothing = max(
+            0.0, min(1.0, landmark_smoothing)
+        )  # Clamp to [0,1]
+
+        # Store previous landmarks for smoothing
+        self._prev_landmarks: list[Landmark] | None = None
 
         # Configure MediaPipe HandLandmarker
         base_options = python.BaseOptions(model_asset_path=settings.MODEL_PATH)
@@ -143,6 +152,13 @@ class HandTracker:
                     for lm in hand_landmarks
                 ]
 
+                # Apply landmark smoothing if enabled
+                if self.landmark_smoothing > 0 and self._prev_landmarks is not None:
+                    landmarks = self._smooth_landmarks(landmarks, self._prev_landmarks)
+
+                # Store for next frame
+                self._prev_landmarks = landmarks
+
                 # Extract handedness label and confidence
                 # handedness is a list of Classification objects
                 hand_label = handedness[0].category_name  # "Left" or "Right"
@@ -157,6 +173,36 @@ class HandTracker:
                 )
 
         return hands_data
+
+    def _smooth_landmarks(
+        self, current: list[Landmark], previous: list[Landmark]
+    ) -> list[Landmark]:
+        """Apply exponential moving average smoothing to landmarks.
+
+        This reduces jitter in landmark positions, especially important for
+        long-distance detection where landmarks are less stable.
+
+        Args:
+            current: Current frame landmarks.
+            previous: Previous frame landmarks.
+
+        Returns:
+            Smoothed landmarks.
+        """
+        alpha = 1.0 - self.landmark_smoothing  # Convert to EMA alpha
+        smoothed = []
+
+        for curr, prev in zip(current, previous, strict=True):
+            smoothed.append(
+                Landmark(
+                    x=alpha * curr.x + (1 - alpha) * prev.x,
+                    y=alpha * curr.y + (1 - alpha) * prev.y,
+                    z=alpha * curr.z + (1 - alpha) * prev.z,
+                    visibility=curr.visibility,  # Don't smooth visibility
+                )
+            )
+
+        return smoothed
 
     def close(self) -> None:
         """Release MediaPipe resources.
