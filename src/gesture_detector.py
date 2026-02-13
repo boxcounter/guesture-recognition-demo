@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from config import settings
-from src.hand_tracker import HandData, Landmark
+from src.hand_tracker import HandData, Landmark, transform_to_hand_space
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +38,16 @@ class GestureResult:
 class GestureDetector:
     """Detect hand gestures from landmark data using geometric analysis."""
 
+    def __init__(self, use_hand_relative_coords: bool = True) -> None:
+        """Initialize gesture detector.
+
+        Args:
+            use_hand_relative_coords: If True, transform landmarks to hand-relative
+                coordinate system before detection. This makes detection invariant
+                to hand rotation and orientation. Defaults to True.
+        """
+        self.use_hand_relative_coords = use_hand_relative_coords
+
     def detect(self, hand_data: HandData) -> GestureResult:
         """Detect gesture from hand landmark data.
 
@@ -48,11 +58,18 @@ class GestureDetector:
             Detected gesture with confidence score.
         """
         landmarks = hand_data.landmarks
+        original_landmarks = landmarks  # Keep original for pointing detection
 
         # Validate landmark count
         if len(landmarks) != 21:
             logger.error(f"Invalid landmark count: {len(landmarks)}, expected 21")
             return GestureResult(gesture=GestureType.UNKNOWN, confidence=0.0)
+
+        # Transform to hand-relative coordinates if enabled
+        # (for fist and palm forward detection)
+        if self.use_hand_relative_coords:
+            landmarks = transform_to_hand_space(landmarks)
+            logger.debug("Transformed landmarks to hand-relative coordinate system")
 
         # Check gestures in order of distinctiveness
         # Start with palm forward (most distinct)
@@ -69,8 +86,9 @@ class GestureDetector:
             logger.info(f"Detected: FIST (confidence: {fist_result.confidence:.2f})")
             return fist_result
 
-        # Check for pointing gestures
-        pointing_result = self._check_pointing(landmarks)
+        # Check for pointing gestures (use original image-space landmarks)
+        # Pointing direction is inherently image-relative
+        pointing_result = self._check_pointing(original_landmarks)
         if pointing_result.gesture != GestureType.UNKNOWN:
             logger.info(
                 f"Detected: {pointing_result.gesture.value.upper()} (confidence: {pointing_result.confidence:.2f})"
@@ -83,12 +101,12 @@ class GestureDetector:
     def _check_palm_forward(self, landmarks: list[Landmark]) -> GestureResult:
         """Check if palm is facing forward (toward camera).
 
-        Palm forward is detected when:
-        - All fingertips are extended
-        - Palm normal vector points toward camera (negative Z)
+        In hand-relative coordinates:
+        - All fingertips should be extended along X-axis (positive X)
+        - Fingertips should have small Z values (close to palm plane)
 
         Args:
-            landmarks: List of 21 hand landmarks.
+            landmarks: List of 21 hand landmarks (in hand-relative coords if enabled).
 
         Returns:
             GestureResult with PALM_FORWARD or UNKNOWN and calculated confidence.
@@ -111,26 +129,43 @@ class GestureDetector:
         if not fingers_extended:
             return GestureResult(gesture=GestureType.UNKNOWN, confidence=0.0)
 
-        # Check palm orientation using wrist (0) and middle MCP (9)
-        wrist = landmarks[0]
-        middle_mcp = landmarks[9]
+        # In hand-relative space, check that fingertips are in palm plane (small Z)
+        # In image space, check Z-depth as before
+        if self.use_hand_relative_coords:
+            # Average Z-coordinate of fingertips (should be close to palm plane)
+            fingertip_indices = [8, 12, 16, 20]  # Index, middle, ring, pinky tips
+            avg_z = sum(abs(landmarks[i].z) for i in fingertip_indices) / len(
+                fingertip_indices
+            )
 
-        # Palm normal approximation: vector from wrist to middle MCP
-        # If Z component is negative, palm is facing camera
-        palm_z = middle_mcp.z - wrist.z
+            logger.debug(f"Palm forward - average fingertip |Z|: {avg_z:.3f}")
 
-        logger.debug(
-            f"Palm Z-axis: {palm_z:.3f} (threshold: {-settings.PALM_FORWARD_NORMAL_THRESHOLD})"
-        )
+            # If fingertips are too far from palm plane, not palm forward
+            if avg_z > settings.PALM_FORWARD_FINGERTIP_Z_THRESHOLD:
+                return GestureResult(gesture=GestureType.UNKNOWN, confidence=0.0)
 
-        if palm_z >= -settings.PALM_FORWARD_NORMAL_THRESHOLD:
-            return GestureResult(gesture=GestureType.UNKNOWN, confidence=0.0)
+            # Confidence based on how close fingertips are to palm plane
+            confidence_raw = 1.0 - (avg_z / settings.PALM_FORWARD_FINGERTIP_Z_THRESHOLD)
+            confidence = max(settings.MIN_CONFIDENCE_PALM, min(1.0, confidence_raw))
+        else:
+            # Original image-space detection
+            wrist = landmarks[0]
+            middle_mcp = landmarks[9]
 
-        # Calculate confidence based on how strongly the palm faces forward
-        # More negative palm_z = more confident
-        # Normalize by threshold and scale up to get meaningful range
-        confidence_raw = abs(palm_z) / (settings.PALM_FORWARD_NORMAL_THRESHOLD * 10)
-        confidence = max(settings.MIN_CONFIDENCE_PALM, min(1.0, confidence_raw))
+            # Palm normal approximation: vector from wrist to middle MCP
+            # If Z component is negative, palm is facing camera
+            palm_z = middle_mcp.z - wrist.z
+
+            logger.debug(
+                f"Palm Z-axis: {palm_z:.3f} (threshold: {-settings.PALM_FORWARD_NORMAL_THRESHOLD})"
+            )
+
+            if palm_z >= -settings.PALM_FORWARD_NORMAL_THRESHOLD:
+                return GestureResult(gesture=GestureType.UNKNOWN, confidence=0.0)
+
+            # Calculate confidence
+            confidence_raw = abs(palm_z) / (settings.PALM_FORWARD_NORMAL_THRESHOLD * 10)
+            confidence = max(settings.MIN_CONFIDENCE_PALM, min(1.0, confidence_raw))
 
         return GestureResult(gesture=GestureType.PALM_FORWARD, confidence=confidence)
 
@@ -211,18 +246,27 @@ class GestureDetector:
         - Other fingers (middle, ring, pinky) are curled
         - Index finger direction determines gesture
 
+        Note: Always uses image-space landmarks for direction detection.
+
         Args:
-            landmarks: List of 21 hand landmarks.
+            landmarks: List of 21 hand landmarks (in image coordinates).
 
         Returns:
             GestureResult with pointing direction or UNKNOWN with calculated confidence.
         """
         # Check if index is extended and others are curled
-        index_extended = self._is_finger_extended(landmarks, finger_idx=1)
+        # Use image-space distance (2D) since these are image-space landmarks
+        index_extended = self._is_finger_extended(landmarks, finger_idx=1, use_3d=False)
         others_curled = (
-            not self._is_finger_extended(landmarks, finger_idx=2)  # Middle
-            and not self._is_finger_extended(landmarks, finger_idx=3)  # Ring
-            and not self._is_finger_extended(landmarks, finger_idx=4)  # Pinky
+            not self._is_finger_extended(
+                landmarks, finger_idx=2, use_3d=False
+            )  # Middle
+            and not self._is_finger_extended(
+                landmarks, finger_idx=3, use_3d=False
+            )  # Ring
+            and not self._is_finger_extended(
+                landmarks, finger_idx=4, use_3d=False
+            )  # Pinky
         )
 
         if not (index_extended and others_curled):
@@ -280,15 +324,16 @@ class GestureDetector:
 
         return GestureResult(gesture=gesture, confidence=confidence)
 
-    def _is_finger_extended(self, landmarks: list[Landmark], finger_idx: int) -> bool:
+    def _is_finger_extended(
+        self, landmarks: list[Landmark], finger_idx: int, use_3d: bool | None = None
+    ) -> bool:
         """Check if a finger is extended based on landmark positions.
-
-        A finger is considered extended if its tip is farther from the wrist
-        than its base (MCP joint).
 
         Args:
             landmarks: List of 21 hand landmarks.
             finger_idx: Finger index (1=index, 2=middle, 3=ring, 4=pinky).
+            use_3d: If True, use 3D distance; if False, use 2D distance.
+                If None, uses self.use_hand_relative_coords.
 
         Returns:
             True if finger is extended.
@@ -305,9 +350,17 @@ class GestureDetector:
         mcp = landmarks[mcp_idx]
         tip = landmarks[tip_idx]
 
-        # Calculate distances from wrist
-        dist_mcp = self._distance_2d(wrist, mcp)
-        dist_tip = self._distance_2d(wrist, tip)
+        # Determine which distance calculation to use
+        if use_3d is None:
+            use_3d = self.use_hand_relative_coords
+
+        # Use 3D distance in hand-relative space, 2D in image space
+        if use_3d:
+            dist_mcp = self._distance_3d(wrist, mcp)
+            dist_tip = self._distance_3d(wrist, tip)
+        else:
+            dist_mcp = self._distance_2d(wrist, mcp)
+            dist_tip = self._distance_2d(wrist, tip)
 
         # Finger is extended if tip is farther than MCP by threshold
         return dist_tip > dist_mcp * (1 + settings.FINGER_EXTENSION_THRESHOLD)
@@ -329,9 +382,13 @@ class GestureDetector:
         thumb_mcp = landmarks[2]
         thumb_tip = landmarks[4]
 
-        # Calculate distances from wrist
-        dist_mcp = self._distance_2d(wrist, thumb_mcp)
-        dist_tip = self._distance_2d(wrist, thumb_tip)
+        # Use 3D distance in hand-relative space, 2D in image space
+        if self.use_hand_relative_coords:
+            dist_mcp = self._distance_3d(wrist, thumb_mcp)
+            dist_tip = self._distance_3d(wrist, thumb_tip)
+        else:
+            dist_mcp = self._distance_2d(wrist, thumb_mcp)
+            dist_tip = self._distance_2d(wrist, thumb_tip)
 
         # Thumb is extended if tip is farther than MCP by threshold percentage
         is_extended = dist_tip > dist_mcp * (1 + settings.THUMB_EXTENSION_THRESHOLD)
@@ -356,3 +413,18 @@ class GestureDetector:
         dx = p2.x - p1.x
         dy = p2.y - p1.y
         return math.sqrt(dx * dx + dy * dy)
+
+    def _distance_3d(self, p1: Landmark, p2: Landmark) -> float:
+        """Calculate 3D Euclidean distance between two landmarks.
+
+        Args:
+            p1: First landmark.
+            p2: Second landmark.
+
+        Returns:
+            Distance in 3D coordinate space.
+        """
+        dx = p2.x - p1.x
+        dy = p2.y - p1.y
+        dz = p2.z - p1.z
+        return math.sqrt(dx * dx + dy * dy + dz * dz)

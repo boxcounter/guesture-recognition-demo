@@ -28,6 +28,9 @@ POINTING_ANGLE_TOLERANCE = (
 PALM_FORWARD_NORMAL_THRESHOLD = (
     0.01  # Z-coordinate threshold for palm orientation (reduced from 0.05)
 )
+PALM_FORWARD_FINGERTIP_Z_THRESHOLD = (
+    0.15  # Hand-relative Z threshold for palm forward detection
+)
 FINGER_TOUCH_THRESHOLD = 0.05  # Reserved for future: finger pinch detection
 THUMB_EXTENSION_THRESHOLD = 0.7  # Minimum thumb length ratio for extension
 

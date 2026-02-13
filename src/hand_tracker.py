@@ -6,6 +6,7 @@ tracking hand landmarks in video frames.
 Note: Uses MediaPipe 0.10+ API (HandLandmarker instead of legacy Hands solution).
 """
 
+import math
 from dataclasses import dataclass
 from types import TracebackType
 from typing import Self
@@ -39,6 +40,160 @@ class HandData:
     landmarks: list[Landmark]  # 21 landmarks per hand
     handedness: str  # "Left" or "Right"
     confidence: float  # Detection confidence (0-1)
+
+
+def normalize_vector(v: tuple[float, float, float]) -> tuple[float, float, float]:
+    """Normalize a 3D vector to unit length.
+
+    Args:
+        v: Vector as (x, y, z) tuple.
+
+    Returns:
+        Normalized vector with length 1.0, or (0, 0, 0) if input is zero vector.
+    """
+    length = math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2])
+    if length < 1e-8:  # Avoid division by zero
+        return (0.0, 0.0, 0.0)
+    return (v[0] / length, v[1] / length, v[2] / length)
+
+
+def cross_product(
+    v1: tuple[float, float, float], v2: tuple[float, float, float]
+) -> tuple[float, float, float]:
+    """Calculate cross product of two 3D vectors.
+
+    Args:
+        v1: First vector as (x, y, z) tuple.
+        v2: Second vector as (x, y, z) tuple.
+
+    Returns:
+        Cross product v1 × v2 as (x, y, z) tuple.
+    """
+    return (
+        v1[1] * v2[2] - v1[2] * v2[1],
+        v1[2] * v2[0] - v1[0] * v2[2],
+        v1[0] * v2[1] - v1[1] * v2[0],
+    )
+
+
+def dot_product(
+    v1: tuple[float, float, float], v2: tuple[float, float, float]
+) -> float:
+    """Calculate dot product of two 3D vectors.
+
+    Args:
+        v1: First vector as (x, y, z) tuple.
+        v2: Second vector as (x, y, z) tuple.
+
+    Returns:
+        Dot product v1 · v2.
+    """
+    return v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2]
+
+
+def calculate_hand_basis(
+    landmarks: list[Landmark],
+) -> tuple[
+    tuple[float, float, float], tuple[float, float, float], tuple[float, float, float]
+]:
+    """Calculate hand-relative coordinate system basis vectors.
+
+    The hand basis is defined as:
+    - Origin: Wrist (landmark 0)
+    - X-axis: Direction from wrist to middle finger MCP (landmark 9)
+    - Y-axis: Perpendicular to X, in palm plane (using pinky MCP)
+    - Z-axis: Palm normal (X × Y)
+
+    This creates a coordinate system that rotates with the hand.
+
+    Args:
+        landmarks: List of 21 hand landmarks.
+
+    Returns:
+        Tuple of (x_axis, y_axis, z_axis) as unit vectors.
+        Returns identity basis if landmarks are degenerate.
+    """
+    wrist = landmarks[0]
+    middle_mcp = landmarks[9]  # Middle finger base
+    pinky_mcp = landmarks[17]  # Pinky finger base
+
+    # X-axis: wrist -> middle MCP (forward direction along hand)
+    x_vec = (
+        middle_mcp.x - wrist.x,
+        middle_mcp.y - wrist.y,
+        middle_mcp.z - wrist.z,
+    )
+    x_axis = normalize_vector(x_vec)
+
+    # Temp vector: wrist -> pinky MCP (across palm)
+    pinky_vec = (
+        pinky_mcp.x - wrist.x,
+        pinky_mcp.y - wrist.y,
+        pinky_mcp.z - wrist.z,
+    )
+
+    # Z-axis: normal to palm plane (X × pinky_vec)
+    z_vec = cross_product(x_vec, pinky_vec)
+    z_axis = normalize_vector(z_vec)
+
+    # Y-axis: perpendicular to X and Z (Z × X)
+    # This ensures right-handed coordinate system
+    y_vec = cross_product(z_vec, x_vec)
+    y_axis = normalize_vector(y_vec)
+
+    # Check for degenerate case (collinear points)
+    if (
+        x_axis == (0.0, 0.0, 0.0)
+        or y_axis == (0.0, 0.0, 0.0)
+        or z_axis == (0.0, 0.0, 0.0)
+    ):
+        # Return identity basis as fallback
+        return ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))
+
+    return (x_axis, y_axis, z_axis)
+
+
+def transform_to_hand_space(
+    landmarks: list[Landmark],
+) -> list[Landmark]:
+    """Transform landmarks from image space to hand-relative coordinate system.
+
+    This makes gesture detection invariant to hand rotation and orientation.
+
+    Args:
+        landmarks: List of 21 landmarks in image coordinates.
+
+    Returns:
+        List of 21 landmarks in hand-relative coordinates.
+    """
+    # Calculate hand basis vectors
+    x_axis, y_axis, z_axis = calculate_hand_basis(landmarks)
+
+    # Origin is the wrist
+    wrist = landmarks[0]
+    origin = (wrist.x, wrist.y, wrist.z)
+
+    # Transform each landmark
+    transformed = []
+    for lm in landmarks:
+        # Vector from wrist to landmark
+        vec = (lm.x - origin[0], lm.y - origin[1], lm.z - origin[2])
+
+        # Project onto hand basis vectors
+        x_new = dot_product(vec, x_axis)
+        y_new = dot_product(vec, y_axis)
+        z_new = dot_product(vec, z_axis)
+
+        transformed.append(
+            Landmark(
+                x=x_new,
+                y=y_new,
+                z=z_new,
+                visibility=lm.visibility,
+            )
+        )
+
+    return transformed
 
 
 class HandTracker:
